@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: snack-manager-db
+    environment:
+      POSTGRES_DB: snack_manager
+      POSTGRES_USER: snack
+      POSTGRES_PASSWORD: snackpass
+    ports:
+      - "5438:5432"
+    volumes:
+      - snack_manager_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U snack -d snack_manager"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: snack-manager-api
+    environment:
+      PORT: 5321
+      DATABASE_URL: postgres://snack:snackpass@db:5432/snack_manager
+      JWT_SECRET: change-this-secret-in-production
+      CORS_ORIGIN: http://localhost:5320
+    ports:
+      - "5321:5321"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: snack-manager-web
+    ports:
+      - "5320:80"
+    depends_on:
+      - backend
+
+volumes:
+  snack_manager_data:
