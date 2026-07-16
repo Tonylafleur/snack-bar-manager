@@ -44,3 +44,21 @@ frontend/      React + TypeScript + Vite
 db/            migrations et seed SQL
 docs/          analyse, diagrammes, guide, API
 ```
+
+## Déploiement Vercel avec PostgreSQL
+
+Le site Vercel fonctionne en mode démo si aucune base n'est configurée. Pour activer les données persistantes :
+
+1. Créer une base PostgreSQL hébergée, par exemple via une intégration Postgres du Vercel Marketplace ou Neon.
+2. Exécuter le script SQL `db/migrations/001_schema_seed.sql` dans cette base.
+3. Dans Vercel, ouvrir le projet `snack-bar-manager`, puis `Settings` > `Environment Variables`.
+4. Ajouter `DATABASE_URL` en `Production` avec l'URL PostgreSQL publique, idéalement avec `sslmode=require`.
+5. Ajouter aussi `JWT_SECRET` en `Production` avec une valeur longue et secrète.
+6. Redéployer le projet depuis Vercel ou en poussant un commit sur `main`.
+
+Exemple de format :
+
+```text
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE?sslmode=require
+JWT_SECRET=une-valeur-longue-et-secrete
+```

@@ -1,9 +1,12 @@
 import pg from 'pg'
 
 const { Pool } = pg
+const connectionString = process.env.DATABASE_URL ?? 'postgres://snack:snackpass@localhost:5438/snack_manager'
+const requiresSsl = connectionString.includes('sslmode=require') || (process.env.VERCEL === '1' && !connectionString.includes('localhost'))
 
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL ?? 'postgres://snack:snackpass@localhost:5438/snack_manager'
+  connectionString,
+  ssl: requiresSsl ? { rejectUnauthorized: false } : undefined
 })
 
 export async function query(text: string, params: any[] = []) {
