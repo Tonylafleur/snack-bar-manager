@@ -373,4 +373,8 @@ app.use((err: any, _req: any, res: any, _next: any) => {
   res.status(err.status ?? 500).json({ message: err.message ?? 'Erreur serveur' })
 })
 
-app.listen(port, () => console.log(`Snack Manager API running on ${port}`))
+if (process.env.VERCEL !== '1') {
+  app.listen(port, () => console.log(`Snack Manager API running on ${port}`))
+}
+
+export default app
