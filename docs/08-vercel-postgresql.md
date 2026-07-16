@@ -21,6 +21,30 @@ Options recommandees :
 
 Option simple recommandee : Neon.
 
+## Option si Neon n'apparait pas : Supabase
+
+Si `Neon` n'apparait pas dans ton dashboard Vercel, utilise `Supabase`.
+
+### Etapes 1 a 4 avec Supabase
+
+1. Ouvrir cette page dans le navigateur :
+
+```text
+https://vercel.com/marketplace/supabase
+```
+
+2. Cliquer sur le bouton `Install`.
+
+3. Selectionner le projet Vercel :
+
+```text
+snack-bar-manager
+```
+
+4. Creer le projet Supabase / PostgreSQL propose par l'assistant d'installation.
+
+Apres ces 4 etapes, Vercel doit ajouter des variables comme `POSTGRES_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DATABASE` et `POSTGRES_HOST`.
+
 ## 2. Installer Neon depuis Vercel
 
 1. Ouvrir le dashboard Vercel.
