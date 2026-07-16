@@ -2,6 +2,8 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { z } from 'zod'
+import jwt from 'jsonwebtoken'
+import { randomUUID } from 'crypto'
 import { query, transaction } from './db.js'
 import { login, requireAuth } from './auth.js'
 import { openapi } from './openapi.js'
@@ -70,6 +72,78 @@ async function stockLevel(client: any, itemId: string, locationId: string) {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'snack-manager-api' }))
 app.get('/api/openapi.json', (_req, res) => res.json(openapi))
+
+const demoMode = process.env.VERCEL === '1' && !process.env.DATABASE_URL
+const demoSecret = process.env.JWT_SECRET ?? 'dev-secret'
+const demoUser = { id: '11111111-1111-4111-8111-111111111111', username: 'gerant', fullName: 'Gérant Principal', role: 'GERANT' }
+const demoCategories = [
+  { id: '22222222-2222-4222-8222-222222222201', name: 'Bières casiers' },
+  { id: '22222222-2222-4222-8222-222222222202', name: 'Jus et eaux' },
+  { id: '22222222-2222-4222-8222-222222222203', name: 'Vins et whiskys' }
+]
+const demoItems: any[] = [
+  { id: '33333333-3333-4333-8333-333333333301', category_name: 'Bières casiers', categoryId: demoCategories[0].id, name: 'Castel Beer', brand: 'Castel', flavor: '', volume: '65cl', package_label: 'Casier 24', base_unit: 'bouteille', package_equivalence: 24, alert_threshold: 24, purchase_price_xaf: 500, sale_price_standard_xaf: 1000, sale_price_vip_xaf: 1500, status: 'ACTIVE' },
+  { id: '33333333-3333-4333-8333-333333333302', category_name: 'Jus et eaux', categoryId: demoCategories[1].id, name: 'Top Grenadine', brand: 'Top', flavor: 'Grenadine', volume: '1L', package_label: 'Carton 12', base_unit: 'bouteille', package_equivalence: 12, alert_threshold: 12, purchase_price_xaf: 450, sale_price_standard_xaf: 800, sale_price_vip_xaf: 1200, status: 'ACTIVE' },
+  { id: '33333333-3333-4333-8333-333333333303', category_name: 'Vins et whiskys', categoryId: demoCategories[2].id, name: 'Vieux Papes', brand: '', flavor: '', volume: '75cl', package_label: 'Carton 6', base_unit: 'bouteille', package_equivalence: 6, alert_threshold: 6, purchase_price_xaf: 2500, sale_price_standard_xaf: 4000, sale_price_vip_xaf: 6000, status: 'ACTIVE' }
+]
+const demoStocks: Record<string, Record<string, number>> = {
+  CENTRAL: { [demoItems[0].id]: 240, [demoItems[1].id]: 120, [demoItems[2].id]: 42 },
+  STANDARD: { [demoItems[0].id]: 48, [demoItems[1].id]: 24, [demoItems[2].id]: 6 },
+  VIP: { [demoItems[0].id]: 24, [demoItems[1].id]: 12, [demoItems[2].id]: 12 }
+}
+const demoFinance: any[] = [{ id: randomUUID(), entry_type: 'EXPENSE', category: 'Ration employes', label: 'Ration journaliere - Equipe', amount_xaf: 5000, operation_date: today(), recorded_at: new Date().toISOString() }]
+const demoMovements: any[] = [
+  { id: randomUUID(), operation_type: 'SALE', item_id: demoItems[0].id, item_name: demoItems[0].name, quantity_base: 12, quantity_input: 12, unit_input: 'base', amount_xaf: 12000, operation_date: today(), recorded_at: new Date().toISOString(), source_name: 'Comptoir standard', destination_name: null, retrospective: false, reason: 'Vente demo' }
+]
+
+function demoStockRows(code: string) {
+  return demoItems.map(item => ({
+    quantity_base: demoStocks[code]?.[item.id] ?? 0,
+    location_code: code,
+    location_name: code === 'CENTRAL' ? 'Magasin central' : code === 'VIP' ? 'Comptoir VIP' : 'Comptoir standard',
+    item_id: item.id,
+    name: item.name,
+    category_name: item.category_name,
+    base_unit: item.base_unit,
+    package_label: item.package_label,
+    package_equivalence: item.package_equivalence,
+    alert_threshold: item.alert_threshold
+  }))
+}
+
+if (demoMode) {
+  app.post('/api/auth/login', asyncHandler(async (req, res) => {
+    const body = z.object({ username: z.string(), password: z.string() }).parse(req.body)
+    if (body.username !== 'gerant' || body.password !== 'Gerant123!') return res.status(401).json({ message: 'Identifiants incorrects' })
+    res.json({ user: demoUser, token: jwt.sign(demoUser, demoSecret, { expiresIn: '12h' }) })
+  }))
+  app.use('/api', requireAuth)
+  app.get('/api/auth/me', (req, res) => res.json({ user: req.user }))
+  app.get('/api/categories', (_req, res) => res.json(demoCategories))
+  app.get('/api/items', (_req, res) => res.json(demoItems))
+  app.get('/api/stocks/:locationCode', (req, res) => res.json(demoStockRows(req.params.locationCode.toUpperCase())))
+  app.get('/api/movements', (_req, res) => res.json(demoMovements))
+  app.get('/api/central/receipts', (_req, res) => res.json(demoMovements.filter(m => m.operation_type === 'SUPPLIER_IN')))
+  app.get('/api/outlets/:locationCode/situation', (req, res) => {
+    const code = req.params.locationCode.toUpperCase()
+    res.json({ stock: demoStockRows(code), movements: demoMovements.filter(m => m.source_name?.toUpperCase().includes(code === 'VIP' ? 'VIP' : 'STANDARD')).slice(0, 30) })
+  })
+  app.get('/api/dashboard', (_req, res) => {
+    const todaySales = demoMovements.filter(m => m.operation_type === 'SALE' && m.operation_date === today()).reduce((s, m) => s + Number(m.amount_xaf), 0)
+    const expenses = demoFinance.filter(f => f.entry_type === 'EXPENSE' && f.operation_date === today()).reduce((s, f) => s + Number(f.amount_xaf), 0)
+    res.json({ stocks: ['CENTRAL', 'STANDARD', 'VIP'].map(code => ({ code, location: code === 'CENTRAL' ? 'Magasin central' : `Comptoir ${code}`, quantity: demoStockRows(code).reduce((s, r) => s + Number(r.quantity_base), 0) })), alerts: [], todaySales, expenses, losses: [], movements: demoMovements.slice(0, 20), salesTrend: Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); return { operation_date: d.toISOString().slice(0, 10), standard: i === 6 ? todaySales : 0, vip: 0 } }) })
+  })
+  app.post('/api/finance/entries', asyncHandler(async (req, res) => {
+    const body = z.object({ locationCode: z.string().optional(), entryType: z.string(), category: z.string(), label: z.string(), amount: z.number(), operationDate: z.string() }).parse(req.body)
+    const entry = { id: randomUUID(), entry_type: body.entryType, category: body.category, label: body.label, amount_xaf: body.amount, operation_date: body.operationDate, recorded_at: new Date().toISOString() }
+    demoFinance.unshift(entry)
+    res.status(201).json(entry)
+  }))
+  app.get('/api/finance/summary', (_req, res) => res.json(demoFinance.map(f => ({ entry_type: f.entry_type, category: f.category, amount: f.amount_xaf }))))
+  app.get('/api/reports/daily', (req, res) => res.json({ date: String(req.query.date ?? today()), sales: [{ code: 'STANDARD', amount: 12000 }, { code: 'VIP', amount: 0 }], outputs: [], expenses: demoFinance.reduce((s, f) => s + Number(f.amount_xaf), 0) }))
+  app.get('/api/backup', (_req, res) => res.json({ exportedAt: new Date().toISOString(), backup: { demo: true } }))
+  app.use('/api', (_req, res) => res.status(503).json({ message: 'Mode demo Vercel actif. Configure DATABASE_URL pour activer la base PostgreSQL persistante.' }))
+}
 
 app.post('/api/auth/login', asyncHandler(async (req, res) => {
   const body = z.object({ username: z.string().min(1), password: z.string().min(1) }).parse(req.body)
